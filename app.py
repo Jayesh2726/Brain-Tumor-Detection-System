@@ -16,7 +16,7 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 
 # Load your trained model
 # IMPORTANT: Replace this path with your actual model file path
-MODEL_PATH = 'E:\MaxGen\git2025\App\BrainTumor10Epochs.h5'  # or 'your_model.keras'
+MODEL_PATH = os.environ.get('MODEL_PATH', 'BrainTumor10Epochs.h5')  # or 'your_model.keras'
 
 try:
     model = load_model(MODEL_PATH)
@@ -125,9 +125,8 @@ def health_check():
         'model_loaded': model is not None
     })
 
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 10000))
-    app.run(debug=False, host='0.0.0.0', port=port)
+port = int(os.environ.get('PORT', 10000))
+app.run(debug=False, host='0.0.0.0', port=port)
     
     # For production, use gunicorn or similar:
 
