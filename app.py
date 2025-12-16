@@ -13,19 +13,31 @@ CORS(app)  # Enable CORS for all routes
 # Configuration
 TARGET_SIZE = (64, 64)
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max
 
-# Load your trained model
-# IMPORTANT: Replace this path with your actual model file path
-MODEL_PATH = os.environ.get('MODEL_PATH', 'BrainTumor10Epochs.h5')  # or 'your_model.keras'
+# Model path - use the FIXED model file
+MODEL_PATH = os.environ.get('MODEL_PATH', 'BrainTumor10Epochs_fixed.h5')
 
+# Load model
+model = None
 try:
-    model = load_model(MODEL_PATH)
+    model = load_model(MODEL_PATH, compile=False)
+    
+    # Recompile the model
+    model.compile(
+        optimizer='adam',
+        loss='binary_crossentropy',
+        metrics=['accuracy']
+    )
     print("✅ Model loaded successfully!")
+    print(f"Model path: {MODEL_PATH}")
+    
 except Exception as e:
     print(f"❌ Error loading model: {e}")
     model = None
 
 def allowed_file(filename):
+    """Check if file extension is allowed"""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def preprocess_image(img_path):
@@ -38,10 +50,12 @@ def preprocess_image(img_path):
 
 @app.route('/')
 def home():
+    """API home endpoint"""
     return jsonify({
         'message': 'Brain Tumor Detection API',
         'status': 'running',
-        'model_loaded': model is not None
+        'model_loaded': model is not None,
+        'model_path': MODEL_PATH
     })
 
 @app.route('/predict', methods=['POST'])
@@ -78,6 +92,7 @@ def predict():
             'error': 'Invalid file type. Only PNG, JPG, and JPEG are allowed.'
         }), 400
     
+    temp_path = None
     try:
         # Save file temporarily
         filename = secure_filename(file.filename)
@@ -89,7 +104,7 @@ def predict():
         processed_image = preprocess_image(temp_path)
         
         # Make prediction
-        prediction = model.predict(processed_image)
+        prediction = model.predict(processed_image, verbose=0)
         prediction_value = float(prediction[0][0])
         
         # Determine result based on threshold
@@ -97,7 +112,8 @@ def predict():
         confidence = prediction_value * 100 if has_tumor else (1 - prediction_value) * 100
         
         # Clean up temporary file
-        os.remove(temp_path)
+        if temp_path and os.path.exists(temp_path):
+            os.remove(temp_path)
         
         # Return results
         return jsonify({
@@ -110,7 +126,7 @@ def predict():
     
     except Exception as e:
         # Clean up temporary file if it exists
-        if os.path.exists(temp_path):
+        if temp_path and os.path.exists(temp_path):
             os.remove(temp_path)
         
         return jsonify({
@@ -125,9 +141,7 @@ def health_check():
         'model_loaded': model is not None
     })
 
-port = int(os.environ.get('PORT', 10000))
-app.run(debug=False, host='0.0.0.0', port=port)
-    
-    # For production, use gunicorn or similar:
-
-    # gunicorn -w 4 -b 0.0.0.0:5000 app:app
+if __name__ == '__main__':
+    # Get port from environment variable (Render provides this)
+    port = int(os.environ.get('PORT', 10000))
+    app.run(debug=False, host='0.0.0.0', port=port)
